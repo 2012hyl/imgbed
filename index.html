@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>图床 · Image/Video/Audio Host</title>
+<style>
+  :root{
+    --bg:#0d1117; --bg2:#161b22; --bg3:#1f2630; --border:#30363d;
+    --txt:#e6edf3; --dim:#8b949e; --accent:#2f81f7; --accent2:#238636;
+    --warn:#d29922; --err:#f85149;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:var(--bg); color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    min-height:100vh;
+  }
+  .wrap{max-width:960px; margin:0 auto; padding:24px 16px 80px;}
+  header{display:flex; align-items:center; gap:12px; margin-bottom:20px;}
+  .logo{
+    width:44px; height:44px; border-radius:10px; flex:none;
+    background:linear-gradient(135deg,#2f81f7,#7c3aed);
+    display:flex; align-items:center; justify-content:center; color:#fff;
+  }
+  .logo svg{width:24px; height:24px;}
+  header h1{font-size:20px; font-weight:700;}
+  header p{color:var(--dim); font-size:13px; margin-top:2px;}
+  .card{
+    background:var(--bg2); border:1px solid var(--border); border-radius:12px;
+    padding:16px; margin-bottom:16px;
+  }
+  .card h2{font-size:15px; margin-bottom:12px; display:flex; align-items:center; gap:8px;}
+  .card h2 .tag{
+    font-size:11px; color:var(--dim); border:1px solid var(--border); border-radius:20px;
+    padding:1px 8px; font-weight:400;
+  }
+  /* 上传区 */
+  .drop{
+    border:2px dashed var(--border); border-radius:12px; padding:36px 20px;
+    text-align:center; cursor:pointer; transition:border-color .15s, background .15s;
+    position:relative;
+  }
+  .drop:hover,.drop.drag{border-color:var(--accent); background:rgba(47,129,247,.06);}
+  .drop .big{font-size:16px; color:var(--txt);}
+  .drop .sub{color:var(--dim); font-size:13px; margin-top:8px;}
+  .drop .types{color:var(--dim); font-size:12px; margin-top:10px;}
+  .drop input{display:none;}
+  .drop svg.ico{width:40px;height:40px;stroke:var(--accent); margin-bottom:10px;}
+  /* 配置 */
+  .cfg-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px 14px;}
+  .cfg-grid label{display:block; font-size:12px; color:var(--dim); margin-bottom:4px;}
+  .cfg-grid input,.cfg-grid select{
+    width:100%; background:var(--bg3); border:1px solid var(--border); color:var(--txt);
+    border-radius:8px; padding:8px 10px; font-size:13px; outline:none;
+  }
+  .cfg-grid input:focus{border-color:var(--accent);}
+  .full{grid-column:1 / -1;}
+  .opts{display:flex; flex-wrap:wrap; gap:14px; margin-top:12px; font-size:13px;}
+  .opts label{display:flex; align-items:center; gap:6px; color:var(--txt); cursor:pointer;}
+  .opts input{accent-color:var(--accent);}
+  .row-btns{display:flex; gap:10px; margin-top:14px; flex-wrap:wrap;}
+  button{
+    background:var(--bg3); border:1px solid var(--border); color:var(--txt);
+    border-radius:8px; padding:8px 16px; font-size:13px; cursor:pointer; transition:.15s;
+  }
+  button:hover{border-color:var(--accent); color:var(--accent);}
+  button.primary{background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600;}
+  button.primary:hover{background:#3d8bfd; color:#fff;}
+  button.sm{padding:4px 10px; font-size:12px;}
+  .hint{font-size:12px; color:var(--dim); margin-top:10px; line-height:1.7;}
+  .hint code{background:var(--bg3); border:1px solid var(--border); border-radius:4px; padding:0 5px; color:#d2a8ff;}
+  /* 队列 */
+  .item{
+    background:var(--bg3); border:1px solid var(--border); border-radius:10px;
+    padding:12px 14px; margin-bottom:10px;
+  }
+  .item-head{display:flex; align-items:center; gap:10px;}
+  .item-head .kind{
+    flex:none; font-size:11px; font-weight:600; border-radius:6px; padding:2px 8px;
+  }
+  .kind.images{background:rgba(47,129,247,.15); color:#58a6ff;}
+  .kind.videos{background:rgba(124,58,237,.15); color:#a78bfa;}
+  .kind.audios{background:rgba(35,134,54,.15); color:#3fb950;}
+  .item-head .name{flex:1; font-size:13px; word-break:break-all;}
+  .item-head .size{color:var(--dim); font-size:12px; flex:none;}
+  .item-head .state{flex:none; font-size:12px; font-weight:600;}
+  .state.ok{color:#3fb950;} .state.err{color:var(--err);} .state.run{color:var(--warn);}
+  .bar{height:6px; border-radius:3px; background:#21262d; margin-top:10px; overflow:hidden;}
+  .bar>div{height:100%; width:0%; background:var(--accent); transition:width .2s; border-radius:3px;}
+  .links{margin-top:10px; font-size:12px; display:flex; flex-direction:column; gap:6px;}
+  .links .row{display:flex; align-items:center; gap:8px; background:var(--bg2); border:1px solid var(--border); border-radius:6px; padding:5px 8px;}
+  .links .lab{flex:none; color:var(--dim); width:64px;}
+  .links .val{flex:1; color:#58a6ff; word-break:break-all; user-select:all;}
+  .links .val.code{color:#d2a8ff; font-family:Consolas,Menlo,monospace;}
+  .empty{color:var(--dim); font-size:13px; text-align:center; padding:20px 0;}
+  .hist-row{display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--border); font-size:12px;}
+  .hist-row:last-child{border-bottom:none;}
+  .hist-row .hname{flex:1; color:var(--dim); word-break:break-all;}
+  .hist-row .hurl{flex:2; color:#58a6ff; word-break:break-all;}
+  .toast{
+    position:fixed; left:50%; bottom:28px; transform:translateX(-50%);
+    background:var(--bg3); border:1px solid var(--border); border-radius:8px;
+    padding:10px 18px; font-size:13px; opacity:0; pointer-events:none; transition:.25s;
+    box-shadow:0 4px 20px rgba(0,0,0,.5); z-index:99; max-width:80vw;
+  }
+  .toast.show{opacity:1;}
+  .toast.ok{border-color:#3fb950; color:#3fb950;}
+  .toast.err{border-color:var(--err); color:var(--err);}
+  @media (max-width:640px){ .cfg-grid{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>
+      </svg>
+    </div>
+    <div>
+      <h1>图床 <span style="color:var(--dim); font-weight:400; font-size:14px;">Image / Video / Audio Host</span></h1>
+      <p>一键上传图片、视频、音频到 GitHub，返回可直接引用的直链与 CDN 链接</p>
+    </div>
+  </header>
+
+  <!-- 上传区 -->
+  <div class="card">
+    <div class="drop" id="drop">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/>
+      </svg>
+      <div class="big">拖拽文件到这里，或点击选择</div>
+      <div class="sub">支持图片（PNG/JPG/GIF/WebP/SVG…）、视频（MP4/WebM/MOV…）、音频（MP3/WAV/FLAC…）</div>
+      <div class="types">自动分类：<code>images/</code> · <code>videos/</code> · <code>audios/</code> &nbsp;|&nbsp; 单文件上限 100 MB（GitHub 限制）</div>
+      <input type="file" id="fileInput" multiple accept="image/*,video/*,audio/*">
+    </div>
+  </div>
+
+  <!-- 配置 -->
+  <div class="card">
+    <h2>⚙ 配置 <span class="tag">仅保存在当前浏览器 localStorage，不会上传</span></h2>
+    <div class="cfg-grid">
+      <div class="full"><label>GitHub Token（Personal Access Token，需要 repo 写权限）</label>
+        <input type="password" id="cfgToken" placeholder="ghp_xxx 或 fine-grained PAT" autocomplete="off"></div>
+      <div><label>Owner / 用户名</label><input id="cfgOwner" placeholder="github 用户名"></div>
+      <div><label>仓库名</label><input id="cfgRepo" placeholder="imgbed"></div>
+      <div><label>分支</label><input id="cfgBranch" value="main"></div>
+      <div><label>默认分类目录（可选，留空自动分类）</label><input id="cfgDir" placeholder="留空自动 images/videos/audios"></div>
+    </div>
+    <div class="opts">
+      <label><input type="checkbox" id="optJsdelivr" checked> jsDelivr CDN 链接</label>
+      <label><input type="checkbox" id="optRaw" checked> GitHub Raw 直链</label>
+      <label><input type="checkbox" id="optPages"> GitHub Pages 链接</label>
+      <label><input type="checkbox" id="optKeepName"> 保留原始文件名</label>
+    </div>
+    <div class="row-btns">
+      <button class="primary" id="btnSave">保存配置</button>
+      <button id="btnTest">校验 Token</button>
+      <button id="btnClearHist">清空历史</button>
+    </div>
+    <div class="hint" id="saveHint"></div>
+  </div>
+
+  <!-- 上传队列 -->
+  <div class="card">
+    <h2>上传结果</h2>
+    <div id="queue"><div class="empty">暂无上传任务。上传完成后，下方会列出所有可用链接。</div></div>
+  </div>
+
+  <!-- 历史 -->
+  <div class="card">
+    <h2>历史记录 <span class="tag" id="histCount"></span></h2>
+    <div id="hist"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+/* ========== 常量与状态 ========== */
+const CFG_KEY = "imgbed_cfg_v1";
+const HIST_KEY = "imgbed_hist_v1";
+const MAX_BYTES = 100 * 1024 * 1024; // GitHub 硬限制 100MB
+
+const DEFAULT_CFG = {
+  token: "", owner: "", repo: "", branch: "main",
+  dir: "", useJsdelivr: true, useRaw: true, usePages: false, keepName: false
+};
+
+let cfg = loadCfg();
+let queue = []; // 渲染队列
+
+const $ = id => document.getElementById(id);
+
+/* ========== 配置存取 ========== */
+function loadCfg(){
+  try{
+    const raw = localStorage.getItem(CFG_KEY);
+    if(raw){ return Object.assign({}, DEFAULT_CFG, JSON.parse(raw)); }
+  }catch(e){ /* 忽略损坏数据 */ }
+  return Object.assign({}, DEFAULT_CFG);
+}
+function saveCfg(){
+  cfg = {
+    token: $("cfgToken").value.trim(),
+    owner: $("cfgOwner").value.trim(),
+    repo: $("cfgRepo").value.trim(),
+    branch: $("cfgBranch").value.trim() || "main",
+    dir: $("cfgDir").value.trim(),
+    useJsdelivr: $("optJsdelivr").checked,
+    useRaw: $("optRaw").checked,
+    usePages: $("optPages").checked,
+    keepName: $("optKeepName").checked
+  };
+  localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
+}
+function renderCfg(){
+  $("cfgToken").value = cfg.token || "";
+  $("cfgOwner").value = cfg.owner || "";
+  $("cfgRepo").value = cfg.repo || "";
+  $("cfgBranch").value = cfg.branch || "main";
+  $("cfgDir").value = cfg.dir || "";
+  $("optJsdelivr").checked = !!cfg.useJsdelivr;
+  $("optRaw").checked = !!cfg.useRaw;
+  $("optPages").checked = !!cfg.usePages;
+  $("optKeepName").checked = !!cfg.keepName;
+}
+$("btnSave").addEventListener("click", () => {
+  saveCfg();
+  toast("配置已保存 ✓", "ok");
+});
+
+/* ========== Token 校验 ========== */
+$("btnTest").addEventListener("click", async () => {
+  const token = $("cfgToken").value.trim();
+  if(!token){ toast("请先填写 Token", "err"); return; }
+  const btn = $("btnTest");
+  btn.disabled = true; btn.textContent = "校验中…";
+  try{
+    const r = await fetch("https://api.github.com/user", {
+      headers: { Authorization: "Bearer " + token, "X-GitHub-Api-Version": "2022-11-28" }
+    });
+    if(!r.ok) throw new Error("HTTP " + r.status);
+    const u = await r.json();
+    const owner = $("cfgOwner").value.trim() || u.login;
+    $("cfgOwner").value = owner;
+    toast("Token 有效，登录账号：" + u.login + " ✓", "ok");
+  }catch(e){
+    toast("Token 无效：" + e.message, "err");
+  }finally{
+    btn.disabled = false; btn.textContent = "校验 Token";
+  }
+});
+
+/* ========== 文件分类 ========== */
+const EXT_IMG = ["png","jpg","jpeg","gif","webp","svg","bmp","ico","avif","heic","tiff"];
+const EXT_VID = ["mp4","webm","mov","mkv","avi","m4v","ogv","mpeg","3gp","flv"];
+const EXT_AUD = ["mp3","wav","ogg","flac","m4a","aac","opus","wma","aiff"];
+function classify(file){
+  const m = (file.type || "").toLowerCase();
+  const ext = (file.name.split(".").pop() || "").toLowerCase();
+  if(m.startsWith("image/") || EXT_IMG.includes(ext)) return "images";
+  if(m.startsWith("video/") || EXT_VID.includes(ext)) return "videos";
+  if(m.startsWith("audio/") || EXT_AUD.includes(ext)) return "audios";
+  return null;
+}
+const KIND_LABEL = { images:"图片", videos:"视频", audios:"音频" };
+
+/* ========== 文件名 ========== */
+function pad(n){ return String(n).padStart(2, "0"); }
+function makeName(file){
+  const m = (file.name.match(/\.[a-zA-Z0-9]+$/) || [""])[0].toLowerCase();
+  const ext = m || ".bin";
+  const d = new Date();
+  const stamp = "" + d.getFullYear() + pad(d.getMonth()+1) + pad(d.getDate()) +
+                "_" + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds());
+  const rand = Math.random().toString(36).slice(2, 8);
+  if(cfg.keepName){
+    const base = (file.name.replace(/\.[a-zA-Z0-9]+$/, "") || "file")
+      .replace(/[^\w\u4e00-\u9fa5-]/g, "_").slice(0, 40);
+    return base + "_" + stamp + "_" + rand + ext;
+  }
+  return stamp + "_" + rand + ext;
+}
+function fmtSize(n){
+  if(n < 1024) return n + " B";
+  if(n < 1048576) return (n/1024).toFixed(1) + " KB";
+  if(n < 1048576*1024) return (n/1048576).toFixed(1) + " MB";
+  return (n/1073741824).toFixed(2) + " GB";
+}
+
+/* ========== URL 生成 ========== */
+function buildUrls(path, kind){
+  const o = cfg.owner, r = cfg.repo, b = cfg.branch;
+  const list = [];
+  const item = (lab, val, code) => ({ lab, val, code });
+  if(cfg.useRaw)    list.push(item("Raw",    "https://raw.githubusercontent.com/" + o + "/" + r + "/" + b + "/" + path));
+  if(cfg.useJsdelivr) list.push(item("CDN",  "https://cdn.jsdelivr.net/gh/" + o + "/" + r + "@" + b + "/" + path));
+  if(cfg.usePages)  list.push(item("Pages",  "https://" + o + ".github.io/" + r + "/" + path));
+  const url = list.length ? list[0].val : "";
+  if(kind === "images"){
+    list.push(item("Markdown", "![文件名](" + url + ")"));
+  }else if(kind === "videos"){
+    list.push(item("HTML", '<video src="' + url + '" controls preload="metadata"></video>'));
+  }else if(kind === "audios"){
+    list.push(item("HTML", '<audio src="' + url + '" controls></audio>'));
+  }
+  return list;
+}
+
+/* ========== 上传核心 ========== */
+async function uploadFile(file, entry){
+  const kind = classify(file);
+  if(!kind){
+    setState(entry, "err", "不支持的文件类型");
+    return;
+  }
+  if(file.size > MAX_BYTES){
+    setState(entry, "err", "超过 GitHub 100MB 上限");
+    return;
+  }
+  if(file.size > 50 * 1024 * 1024){
+    setState(entry, "run", "文件较大，上传中…");
+  } else {
+    setState(entry, "run", "上传中…");
+  }
+  if(!cfg.token){
+    setState(entry, "err", "请先在上方填写 GitHub Token");
+    return;
+  }
+  if(!cfg.owner || !cfg.repo){
+    setState(entry, "err", "请先填写 Owner 和仓库名");
+    return;
+  }
+  const dir = cfg.dir || kind;
+  const name = makeName(file);
+  const path = dir + "/" + name;
+
+  try{
+    // 读取为 base64
+    const b64 = await new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(String(fr.result).split(",")[1]);
+      fr.onerror = () => reject(new Error("文件读取失败"));
+      fr.readAsDataURL(file);
+    });
+
+    const api = "https://api.github.com/repos/" + cfg.owner + "/" + cfg.repo + "/contents/" +
+                path.split("/").map(encodeURIComponent).join("/");
+    const res = await fetch(api, {
+      method: "PUT",
+      headers: {
+        Authorization: "Bearer " + cfg.token,
+        "Content-Type": "application/json",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28"
+      },
+      body: JSON.stringify({
+        message: "upload " + path + " via imgbed",
+        content: b64,
+        branch: cfg.branch
+      })
+    });
+    const body = await res.json().catch(() => ({}));
+    if(!res.ok){
+      const msg = (body && body.message) || ("HTTP " + res.status);
+      setState(entry, "err", "上传失败：" + msg);
+      return;
+    }
+
+    const links = buildUrls(path, kind);
+    entry.links = links;
+    entry.path = path;
+    entry.kind = kind;
+    setState(entry, "ok", "完成 ✓");
+    addHistory({ path, kind, url: links.length ? links[0].val : "", name: file.name, time: Date.now() });
+    renderItem(entry);
+  }catch(e){
+    setState(entry, "err", "上传失败：" + e.message);
+  }
+}
+
+function addFiles(fileList){
+  const files = Array.from(fileList);
+  files.forEach(f => {
+    const entry = { file: f, kind: classify(f), state: "run", text: "等待中…", links: null, path: "" };
+    queue.unshift(entry);
+    renderItem(entry);
+  });
+  files.forEach(f => {
+    const entry = queue.find(q => q.file === f);
+    uploadFile(f, entry);
+  });
+  renderQueueEmpty();
+}
+
+/* ========== 渲染 ========== */
+function renderQueueEmpty(){
+  $("queue").querySelector(".empty").style.display = queue.length ? "none" : "block";
+}
+function setState(entry, state, text){
+  entry.state = state; entry.text = text;
+  const node = entry._node;
+  if(!node) return;
+  const st = node.querySelector(".state");
+  if(st){
+    st.className = "state " + state;
+    st.textContent = text;
+  }
+}
+function renderItem(entry){
+  let node = entry._node;
+  if(!node){
+    node = document.createElement("div");
+    node.className = "item";
+    entry._node = node;
+    $("queue").insertBefore(node, $("queue").querySelector(".empty"));
+  }
+  const f = entry.file;
+  node.innerHTML = "";
+  const head = document.createElement("div");
+  head.className = "item-head";
+  const kind = document.createElement("span");
+  kind.className = "kind " + (entry.kind || "images");
+  kind.textContent = KIND_LABEL[entry.kind] || "文件";
+  const name = document.createElement("span");
+  name.className = "name";
+  name.textContent = f.name;
+  name.title = f.name;
+  const size = document.createElement("span");
+  size.className = "size";
+  size.textContent = fmtSize(f.size);
+  const state = document.createElement("span");
+  state.className = "state " + entry.state;
+  state.textContent = entry.text;
+  head.appendChild(kind); head.appendChild(name); head.appendChild(size); head.appendChild(state);
+  node.appendChild(head);
+
+  if(entry.state === "run"){
+    const bar = document.createElement("div");
+    bar.className = "bar";
+    const fill = document.createElement("div");
+    bar.appendChild(fill);
+    node.appendChild(bar);
+    let p = 0;
+    const t = setInterval(() => {
+      p = Math.min(92, p + Math.random() * 14);
+      fill.style.width = p + "%";
+    }, 300);
+    entry._timer = t;
+  } else if(entry._timer){
+    clearInterval(entry._timer);
+  }
+
+  if(entry.links){
+    const links = document.createElement("div");
+    links.className = "links";
+    entry.links.forEach(l => {
+      const row = document.createElement("div");
+      row.className = "row";
+      const lab = document.createElement("span");
+      lab.className = "lab";
+      lab.textContent = l.lab;
+      const val = document.createElement("span");
+      val.className = "val" + (l.code ? " code" : "");
+      val.textContent = l.val;
+      const btn = document.createElement("button");
+      btn.className = "sm";
+      btn.textContent = "复制";
+      btn.addEventListener("click", () => copyText(l.val, btn));
+      row.appendChild(lab); row.appendChild(val); row.appendChild(btn);
+      links.appendChild(row);
+    });
+    node.appendChild(links);
+  }
+}
+
+/* ========== 复制 ========== */
+async function copyText(text, btn){
+  let ok = false;
+  try{
+    if(navigator.clipboard && window.isSecureContext){
+      await navigator.clipboard.writeText(text);
+      ok = true;
+    }
+  }catch(e){ /* 走降级 */ }
+  if(!ok){
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try{ document.execCommand("copy"); ok = true; }catch(e){}
+    document.body.removeChild(ta);
+  }
+  if(btn){
+    const old = btn.textContent;
+    btn.textContent = ok ? "已复制 ✓" : "复制失败";
+    setTimeout(() => btn.textContent = old, 1200);
+  }
+  if(ok) toast("已复制到剪贴板 ✓", "ok");
+}
+
+/* ========== 历史 ========== */
+function addHistory(item){
+  let h = [];
+  try{ h = JSON.parse(localStorage.getItem(HIST_KEY) || "[]"); }catch(e){}
+  h.unshift(item);
+  if(h.length > 200) h.length = 200;
+  localStorage.setItem(HIST_KEY, JSON.stringify(h));
+  renderHist();
+}
+function renderHist(){
+  let h = [];
+  try{ h = JSON.parse(localStorage.getItem(HIST_KEY) || "[]"); }catch(e){}
+  $("histCount").textContent = h.length + " 条";
+  const box = $("hist");
+  box.innerHTML = "";
+  if(!h.length){
+    box.innerHTML = '<div class="empty">暂无历史记录</div>';
+    return;
+  }
+  h.forEach(item => {
+    const row = document.createElement("div");
+    row.className = "hist-row";
+    const kind = document.createElement("span");
+    kind.className = "kind " + item.kind;
+    kind.textContent = KIND_LABEL[item.kind] || "文件";
+    const n = document.createElement("span");
+    n.className = "hname";
+    n.textContent = item.name;
+    n.title = item.path;
+    const u = document.createElement("a");
+    u.className = "hurl";
+    u.href = item.url;
+    u.target = "_blank";
+    u.rel = "noopener";
+    u.textContent = item.url;
+    const btn = document.createElement("button");
+    btn.className = "sm";
+    btn.textContent = "复制";
+    btn.addEventListener("click", () => copyText(item.url, btn));
+    row.appendChild(kind); row.appendChild(n); row.appendChild(u); row.appendChild(btn);
+    box.appendChild(row);
+  });
+}
+$("btnClearHist").addEventListener("click", () => {
+  localStorage.removeItem(HIST_KEY);
+  renderHist();
+  toast("历史已清空", "ok");
+});
+
+/* ========== 拖拽 / 选择 ========== */
+const drop = $("drop");
+const fileInput = $("fileInput");
+drop.addEventListener("click", () => fileInput.click());
+fileInput.addEventListener("change", () => {
+  if(fileInput.files.length) addFiles(fileInput.files);
+  fileInput.value = "";
+});
+drop.addEventListener("dragover", e => {
+  e.preventDefault();
+  drop.classList.add("drag");
+});
+drop.addEventListener("dragleave", () => drop.classList.remove("drag"));
+drop.addEventListener("drop", e => {
+  e.preventDefault();
+  drop.classList.remove("drag");
+  if(e.dataTransfer && e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+});
+
+/* ========== Toast ========== */
+let toastTimer = null;
+function toast(msg, type){
+  const t = $("toast");
+  t.textContent = msg;
+  t.className = "toast show" + (type ? " " + type : "");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.className = "toast", 2600);
+}
+
+/* ========== 初始化 ========== */
+renderCfg();
+renderHist();
+</script>
+</body>
+</html>
