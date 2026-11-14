@@ -85,7 +85,7 @@
   .item-head .name{flex:1; font-size:13px; word-break:break-all;}
   .item-head .size{color:var(--dim); font-size:12px; flex:none;}
   .item-head .state{flex:none; font-size:12px; font-weight:600;}
-  .state.ok{color:#3fb950;} .state.err{color:var(--err);} .state.run{color:var(--warn);}
+  .state.ok{color:#3fb950;} .state.err{color:var(--err);} .state.run{color:var(--warn);} .state.wait{color:var(--dim);}
   .bar{height:6px; border-radius:3px; background:#21262d; margin-top:10px; overflow:hidden;}
   .bar>div{height:100%; width:0%; background:var(--accent); transition:width .2s; border-radius:3px;}
   .links{margin-top:10px; font-size:12px; display:flex; flex-direction:column; gap:6px;}
@@ -132,7 +132,7 @@
       </svg>
       <div class="big">拖拽文件到这里，或点击选择</div>
       <div class="sub">支持图片（PNG/JPG/GIF/WebP/SVG…）、视频（MP4/WebM/MOV…）、音频（MP3/WAV/FLAC…）</div>
-      <div class="types">自动分类：<code>images/</code> · <code>videos/</code> · <code>audios/</code> &nbsp;|&nbsp; 单文件上限 100 MB（GitHub 限制）</div>
+      <div class="types">自动分类：<code>images/</code> · <code>videos/</code> · <code>audios/</code> &nbsp;|&nbsp; 上限 100 MB（GitHub 硬限制，实际建议 ≤ 20 MB，越大越慢）</div>
       <input type="file" id="fileInput" multiple accept="image/*,video/*,audio/*">
     </div>
   </div>
@@ -146,12 +146,19 @@
       <div><label>Owner / 用户名</label><input id="cfgOwner" placeholder="github 用户名"></div>
       <div><label>仓库名</label><input id="cfgRepo" placeholder="imgbed"></div>
       <div><label>分支</label><input id="cfgBranch" value="main"></div>
-      <div><label>默认分类目录（可选，留空自动分类）</label><input id="cfgDir" placeholder="留空自动 images/videos/audios"></div>
+      <div><label>CDN 线路（国内建议 testingcf）</label>
+        <select id="cfgCdn">
+          <option value="testingcf.jsdelivr.net">testingcf.jsdelivr.net</option>
+          <option value="gcore.jsdelivr.net">gcore.jsdelivr.net</option>
+          <option value="fastly.jsdelivr.net">fastly.jsdelivr.net</option>
+          <option value="cdn.jsdelivr.net">cdn.jsdelivr.net（国内常打不开）</option>
+        </select></div>
+      <div class="full"><label>默认分类目录（可选，留空自动分类）</label><input id="cfgDir" placeholder="留空自动 images/videos/audios"></div>
     </div>
     <div class="opts">
       <label><input type="checkbox" id="optJsdelivr" checked> jsDelivr CDN 链接</label>
-      <label><input type="checkbox" id="optRaw" checked> GitHub Raw 直链</label>
-      <label><input type="checkbox" id="optPages"> GitHub Pages 链接</label>
+      <label><input type="checkbox" id="optRaw" checked> GitHub Raw 直链（国内多数网络打不开）</label>
+      <label><input type="checkbox" id="optPages" checked> GitHub Pages 链接</label>
       <label><input type="checkbox" id="optKeepName"> 保留原始文件名</label>
     </div>
     <div class="row-btns">
@@ -185,8 +192,9 @@ const HIST_KEY = "imgbed_hist_v1";
 const MAX_BYTES = 100 * 1024 * 1024; // GitHub 硬限制 100MB
 
 const DEFAULT_CFG = {
-  token: "", owner: "", repo: "", branch: "main",
-  dir: "", useJsdelivr: true, useRaw: true, usePages: false, keepName: false
+  token: "", owner: "", repo: "", branch: "main", dir: "",
+  cdnHost: "testingcf.jsdelivr.net",
+  useJsdelivr: true, useRaw: true, usePages: true, keepName: false
 };
 
 let cfg = loadCfg();
@@ -209,6 +217,7 @@ function saveCfg(){
     repo: $("cfgRepo").value.trim(),
     branch: $("cfgBranch").value.trim() || "main",
     dir: $("cfgDir").value.trim(),
+    cdnHost: $("cfgCdn").value || "testingcf.jsdelivr.net",
     useJsdelivr: $("optJsdelivr").checked,
     useRaw: $("optRaw").checked,
     usePages: $("optPages").checked,
@@ -222,6 +231,7 @@ function renderCfg(){
   $("cfgRepo").value = cfg.repo || "";
   $("cfgBranch").value = cfg.branch || "main";
   $("cfgDir").value = cfg.dir || "";
+  $("cfgCdn").value = cfg.cdnHost || "testingcf.jsdelivr.net";
   $("optJsdelivr").checked = !!cfg.useJsdelivr;
   $("optRaw").checked = !!cfg.useRaw;
   $("optPages").checked = !!cfg.usePages;
@@ -294,12 +304,16 @@ function fmtSize(n){
 /* ========== URL 生成 ========== */
 function buildUrls(path, kind){
   const o = cfg.owner, r = cfg.repo, b = cfg.branch;
+  const cdn = "https://" + (cfg.cdnHost || "testingcf.jsdelivr.net") + "/gh/" + o + "/" + r + "@" + b + "/" + path;
+  const raw = "https://raw.githubusercontent.com/" + o + "/" + r + "/" + b + "/" + path;
+  const pages = "https://" + o + ".github.io/" + r + "/" + path;
   const list = [];
   const item = (lab, val, code) => ({ lab, val, code });
-  if(cfg.useRaw)    list.push(item("Raw",    "https://raw.githubusercontent.com/" + o + "/" + r + "/" + b + "/" + path));
-  if(cfg.useJsdelivr) list.push(item("CDN",  "https://cdn.jsdelivr.net/gh/" + o + "/" + r + "@" + b + "/" + path));
-  if(cfg.usePages)  list.push(item("Pages",  "https://" + o + ".github.io/" + r + "/" + path));
-  const url = list.length ? list[0].val : "";
+  if(cfg.useRaw)    list.push(item("Raw",    raw));
+  if(cfg.useJsdelivr) list.push(item("CDN",  cdn));
+  if(cfg.usePages)  list.push(item("Pages",  pages));
+  // 嵌入代码优先用最可能打得开的那条：Pages > CDN > Raw
+  const url = cfg.usePages ? pages : (cfg.useJsdelivr ? cdn : (cfg.useRaw ? raw : ""));
   if(kind === "images"){
     list.push(item("Markdown", "![文件名](" + url + ")"));
   }else if(kind === "videos"){
@@ -311,35 +325,54 @@ function buildUrls(path, kind){
 }
 
 /* ========== 上传核心 ========== */
+const CONCURRENCY = 3;      // 同时上传的文件数，太高会撞 GitHub secondary rate limit
+const MAX_TRIES = 3;        // 单个文件最多尝试次数
+const RETRY_BASE_MS = 1500;
+let pendingQueue = [];
+let activeUploads = 0;
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// 带退避重试的 PUT：403/429/5xx 视为可重试（限流），其余直接抛出
+async function putContent(apiUrl, payload, entry){
+  for(let attempt = 1; ; attempt++){
+    const res = await fetch(apiUrl, {
+      method: "PUT",
+      headers: {
+        Authorization: "Bearer " + cfg.token,
+        "Content-Type": "application/json",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28"
+      },
+      body: JSON.stringify(payload)
+    });
+    if(res.ok) return res;
+    const retryable = res.status === 403 || res.status === 429 || res.status >= 500;
+    if(!retryable || attempt >= MAX_TRIES){
+      const body = await res.json().catch(() => ({}));
+      throw new Error((body && body.message) || ("HTTP " + res.status));
+    }
+    const ra = Number(res.headers.get("retry-after"));
+    const delay = Number.isFinite(ra) && ra > 0 ? ra * 1000 : RETRY_BASE_MS * Math.pow(2, attempt - 1);
+    setState(entry, "run", "被限流，重试中（" + attempt + "/" + (MAX_TRIES - 1) + "）");
+    await sleep(delay);
+  }
+}
+
 async function uploadFile(file, entry){
   const kind = classify(file);
-  if(!kind){
-    setState(entry, "err", "不支持的文件类型");
-    return;
-  }
-  if(file.size > MAX_BYTES){
-    setState(entry, "err", "超过 GitHub 100MB 上限");
-    return;
-  }
-  if(file.size > 50 * 1024 * 1024){
-    setState(entry, "run", "文件较大，上传中…");
-  } else {
-    setState(entry, "run", "上传中…");
-  }
-  if(!cfg.token){
-    setState(entry, "err", "请先在上方填写 GitHub Token");
-    return;
-  }
-  if(!cfg.owner || !cfg.repo){
-    setState(entry, "err", "请先填写 Owner 和仓库名");
-    return;
-  }
+  if(!kind){ setState(entry, "err", "不支持的文件类型"); return; }
+  if(file.size > MAX_BYTES){ setState(entry, "err", "超过 GitHub 100MB 上限"); return; }
+  if(!cfg.token){ setState(entry, "err", "请先在上方填写 GitHub Token"); return; }
+  if(!cfg.owner || !cfg.repo){ setState(entry, "err", "请先填写 Owner 和仓库名"); return; }
+
   const dir = cfg.dir || kind;
   const name = makeName(file);
   const path = dir + "/" + name;
+  setState(entry, "run", "上传中…");
 
   try{
-    // 读取为 base64
+    // 读成 base64（内存峰值约为文件的 1.3–1.5 倍，超大文件手机端可能吃不消）
     const b64 = await new Promise((resolve, reject) => {
       const fr = new FileReader();
       fr.onload = () => resolve(String(fr.result).split(",")[1]);
@@ -349,51 +382,41 @@ async function uploadFile(file, entry){
 
     const api = "https://api.github.com/repos/" + cfg.owner + "/" + cfg.repo + "/contents/" +
                 path.split("/").map(encodeURIComponent).join("/");
-    const res = await fetch(api, {
-      method: "PUT",
-      headers: {
-        Authorization: "Bearer " + cfg.token,
-        "Content-Type": "application/json",
-        "Accept": "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28"
-      },
-      body: JSON.stringify({
-        message: "upload " + path + " via imgbed",
-        content: b64,
-        branch: cfg.branch
-      })
-    });
-    const body = await res.json().catch(() => ({}));
-    if(!res.ok){
-      const msg = (body && body.message) || ("HTTP " + res.status);
-      setState(entry, "err", "上传失败：" + msg);
-      return;
-    }
+    await putContent(api, {
+      message: "upload " + path + " via imgbed",
+      content: b64,
+      branch: cfg.branch
+    }, entry);
 
-    const links = buildUrls(path, kind);
-    entry.links = links;
+    entry.links = buildUrls(path, kind);
     entry.path = path;
     entry.kind = kind;
+    const primary = entry.links.find(l => l.lab === "Pages") || entry.links.find(l => l.lab === "CDN") || entry.links[0];
+    addHistory({ path, kind, url: primary ? primary.val : "", name: file.name, time: Date.now() });
     setState(entry, "ok", "完成 ✓");
-    addHistory({ path, kind, url: links.length ? links[0].val : "", name: file.name, time: Date.now() });
-    renderItem(entry);
   }catch(e){
     setState(entry, "err", "上传失败：" + e.message);
   }
 }
 
+function drain(){
+  while(activeUploads < CONCURRENCY && pendingQueue.length){
+    const entry = pendingQueue.shift();
+    activeUploads++;
+    uploadFile(entry.file, entry).finally(() => { activeUploads--; drain(); });
+  }
+}
+
 function addFiles(fileList){
   const files = Array.from(fileList);
-  files.forEach(f => {
-    const entry = { file: f, kind: classify(f), state: "run", text: "等待中…", links: null, path: "" };
+  for(const f of files){
+    const entry = { file: f, kind: classify(f), state: "wait", text: "排队中…", links: null, path: "" };
     queue.unshift(entry);
     renderItem(entry);
-  });
-  files.forEach(f => {
-    const entry = queue.find(q => q.file === f);
-    uploadFile(f, entry);
-  });
+    pendingQueue.push(entry);
+  }
   renderQueueEmpty();
+  drain();
 }
 
 /* ========== 渲染 ========== */
@@ -401,14 +424,11 @@ function renderQueueEmpty(){
   $("queue").querySelector(".empty").style.display = queue.length ? "none" : "block";
 }
 function setState(entry, state, text){
-  entry.state = state; entry.text = text;
-  const node = entry._node;
-  if(!node) return;
-  const st = node.querySelector(".state");
-  if(st){
-    st.className = "state " + state;
-    st.textContent = text;
-  }
+  entry.state = state;
+  entry.text = text;
+  if(entry._timer){ clearInterval(entry._timer); entry._timer = null; }
+  // 重新渲染整行：这样状态从「上传中」变成「完成/失败」时，计时器会被清掉
+  if(entry._node) renderItem(entry);
 }
 function renderItem(entry){
   let node = entry._node;
@@ -439,19 +459,20 @@ function renderItem(entry){
   node.appendChild(head);
 
   if(entry.state === "run"){
-    const bar = document.createElement("div");
-    bar.className = "bar";
-    const fill = document.createElement("div");
-    bar.appendChild(fill);
-    node.appendChild(bar);
-    let p = 0;
-    const t = setInterval(() => {
-      p = Math.min(92, p + Math.random() * 14);
-      fill.style.width = p + "%";
-    }, 300);
-    entry._timer = t;
+    // GitHub 的 Contents API 是一次性 PUT，拿不到真实上传进度，
+    // 所以这里只显示已经过的秒数，不再画一个假的进度条
+    if(entry._timer){ clearInterval(entry._timer); entry._timer = null; }
+    const meta = document.createElement("div");
+    meta.className = "hint";
+    meta.style.marginTop = "8px";
+    const t0 = Date.now();
+    const paint = () => { meta.textContent = "上传中… " + Math.round((Date.now() - t0) / 1000) + "s"; };
+    paint();
+    node.appendChild(meta);
+    entry._timer = setInterval(paint, 500);
   } else if(entry._timer){
     clearInterval(entry._timer);
+    entry._timer = null;
   }
 
   if(entry.links){

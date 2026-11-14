@@ -1,77 +1,100 @@
 # 图床 · Image / Video / Audio Host
 
-一个零依赖、单文件的上传图床 Web 应用：把图片、视频、音频直接上传到 GitHub 仓库，并返回可长期使用的直链与 CDN 加速链接。
+一个零依赖、单文件的上传图床 Web 应用：把文件直接上传到 GitHub 仓库，并返回可长期使用的直链与 CDN 加速链接。
 
 - 无需后端服务器：页面直接调用 GitHub API 完成上传
 - 自动分类：图片 → `images/`，视频 → `videos/`，音频 → `audios/`
-- 输出多种链接：GitHub Raw 直链、jsDelivr CDN 加速、GitHub Pages 链接，以及 Markdown / HTML 嵌入代码
-- 支持拖拽批量上传、复制到剪贴板、本地历史记录
+- 输出多种链接：GitHub Pages、jsDelivr CDN 加速、GitHub Raw 直链，以及 Markdown / HTML 嵌入代码
+- 支持拖拽批量上传（并发 3，自动重试限流）、复制到剪贴板、本地历史记录
 
 ## 快速开始
 
 ### 1. 申请 GitHub Token（只需一次）
 
-1. 打开 [GitHub Settings → Developer settings → Personal access tokens](https://github.com/settings/tokens)
-2. 点 **Generate new token (classic)**（或创建 fine-grained token）
-3. 勾选 **`repo`** 权限（fine-grained token 则选择本仓库并授予 Contents: Read and write）
-4. 设置过期时间，生成后复制 Token（形如 `ghp_xxxxxxxxxxxx`）
+建议直接用 fine-grained token，只给这一个仓库：
 
-> 安全提示：Token 只保存在当前浏览器的 localStorage 中，不会写入代码仓库。请勿把 Token 提交到任何公开仓库。
+1. 打开 [GitHub Settings → Developer settings → Personal access tokens → Fine-grained tokens](https://github.com/settings/tokens)
+2. `Repository access` 选 **Only select repositories** → 选中本仓库
+3. `Permissions → Repository permissions → Contents` 设为 **Read and write**
+4. 设置过期时间，生成后复制 Token
+
+> 不要用 classic token 的 `repo` 全权限：那等于把账号下所有仓库都交出去。
+
+> 安全提示：Token 只保存在当前浏览器的 localStorage 中，不会写入代码仓库。但 `*.github.io` 下所有仓库共用同一个 origin，别的 Pages 页面里的脚本也能读到这个 Token——不要在 github.io 上跑来源不明的 HTML。
 
 ### 2. 打开图床页面
 
-- **方式 A（推荐，在线版）**：部署到 GitHub Pages 后访问
-  `https://<你的用户名>.github.io/imgbed/`（见下方「部署到 GitHub Pages」）
+- **方式 A（推荐，在线版）**：部署到 GitHub Pages 后访问 `https://<你的用户名>.github.io/imgbed/`
 - **方式 B（离线版）**：直接下载 `index.html`，用浏览器双击打开即可使用
 
 ### 3. 上传
 
-1. 在「配置」面板填入 Token、Owner（GitHub 用户名）、仓库名（默认 `imgbed`）、分支（默认 `main`）
+1. 在「配置」面板填入 Token、Owner、仓库名、分支，**CDN 线路选 `testingcf.jsdelivr.net`**
 2. 点击「保存配置」，可点「校验 Token」确认可用
-3. 拖拽或点击选择图片 / 视频 / 音频文件，上传完成后自动列出所有链接，点「复制」即可
+3. 拖拽或点击选择文件，上传完成后自动列出所有链接
 
 ## 链接格式
 
 | 类型 | 格式 |
 | --- | --- |
-| GitHub Raw 直链 | `https://raw.githubusercontent.com/<owner>/<repo>/<branch>/<path>` |
-| jsDelivr CDN | `https://cdn.jsdelivr.net/gh/<owner>/<repo>@<branch>/<path>` |
 | GitHub Pages | `https://<owner>.github.io/<repo>/<path>` |
+| jsDelivr CDN | `https://<cdnHost>/gh/<owner>/<repo>@<branch>/<path>` |
+| GitHub Raw | `https://raw.githubusercontent.com/<owner>/<repo>/<branch>/<path>` |
 | Markdown | `![文件名](<url>)` |
 | 视频嵌入 | `<video src="<url>" controls preload="metadata"></video>` |
 | 音频嵌入 | `<audio src="<url>" controls></audio>` |
 
-jsDelivr 是 CDN 加速，国内访问快；Raw 直链适合下载。图片建议用任一链接均可；视频/音频建议用 jsDelivr 或 Pages 链接（Raw 链接可能触发下载而非播放）。
+**链接优先级**：Pages > CDN > Raw。生成嵌入代码时会自动选最可能打得开的那条。
+
+## 各线路在国内的实际表现（2026-11 实测）
+
+| 线路 | 结果 |
+| --- | --- |
+| `2012hyl.github.io`（Pages） | ✅ 首包 ~0.5s，最快 |
+| `testingcf.jsdelivr.net` | ✅ 可用，首包 ~1.8s |
+| `gcore.jsdelivr.net` | ✅ 可用，首包 ~2.2s |
+| `cdn.jsdelivr.net` | ❌ TLS 被重置（ECONNRESET） |
+| `fastly.jsdelivr.net` | ❌ TLS 被重置 |
+| `raw.githubusercontent.com` | ❌ TLS 被重置 |
+
+所以默认线路选了 `testingcf`，并且默认开启 Pages。Raw 直链保留但默认标注为「国内多数网络打不开」。
+
+## 不要用它托管视频和音频
+
+实测吞吐（同一网络、同类文件）：
+
+- 图片（几十 KB ~ 1 MB）：够用
+- 视频 1.84 MB：约 13 秒拉完（0.14 MB/s）
+- 音频 11.58 MB：约 65–140 秒（0.08–0.18 MB/s）
+
+这个速度无法在线播放。视频/音频请用对象存储、GitHub Releases 或视频站，本工具只建议放图片。
+
+## 大小限制
+
+- GitHub 单文件硬限制 100 MB，超过 50 MB 开始警告
+- 但浏览器要把文件读成 base64 再塞进 JSON，内存峰值约为文件的 1.3–1.5 倍，手机端 20 MB 以上就可能崩
+- **实际建议单文件 ≤ 20 MB**；每个文件会产生一个 commit，仓库体积只增不减（删文件也不会释放历史）
 
 ## 部署到 GitHub Pages
 
-仓库已包含 `.github/workflows/pages.yml`。首次需启用 Pages：
+仓库已包含 `.github/workflows/pages.yml`，在 **Settings → Pages → Source** 选 **GitHub Actions** 即可。
 
-1. 打开仓库 **Settings → Pages**
-2. 在 **Build and deployment** 的 Source 中选择 **GitHub Actions**
-3. 保存后工作流会自动运行，约 1 分钟部署完成
-
-之后每次推送代码都会自动重新部署。
-
-## 注意事项
-
-- **单文件上限 100 MB**：GitHub API 的硬限制；超过 50 MB 会提示。超大视频建议先压缩或分片。
-- 仓库必须为 **公开**，否则 Raw / CDN 链接无法匿名访问（本仓库已设为公开）。
-- 上传会创建 commit，会占用仓库容量；不建议上传涉密或侵权内容。
-- jsDelivr 首次访问新文件可能需要几秒到几分钟的缓存时间；若想强制刷新，可访问 `https://purge.jsdelivr.net/gh/<owner>/<repo>@<branch>/<path>`。
+注意：每次上传都是一个 push，会触发一次 Pages 重建。传得多、传得勤时 Actions 次数会涨得很快。
 
 ## 技术说明
 
-- 纯原生 HTML / CSS / JavaScript，无任何外部依赖（不引第三方库、不调第三方接口）
+- 纯原生 HTML / CSS / JavaScript，无任何外部依赖
 - 上传走 GitHub Contents API（`PUT /repos/{owner}/{repo}/contents/{path}`，base64 编码）
-- 文件名自动生成：`时间戳_随机数.扩展名`（可选保留原始文件名），避免重名冲突与非 ASCII 路径的 CDN 兼容问题
+- 同时最多 3 个上传任务；遇到 403 / 429 / 5xx 按 `Retry-After` 或指数退避重试，最多 3 次
+- GitHub 的 PUT 拿不到上传进度，所以界面只显示已经过的秒数（不再画假进度条）
+- 文件名自动生成：`时间戳_随机数.扩展名`（可选保留原始文件名）
 
 ## 目录结构
 
 ```
 imgbed/
-├── index.html                # 图床应用（单文件，全部逻辑内联）
-├── README.md                 # 本文档
+├── index.html                   # 图床应用（单文件，全部逻辑内联）
+├── README.md                    # 本文档
 └── .github/workflows/pages.yml  # GitHub Pages 自动部署
 ```
 
