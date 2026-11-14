@@ -187,7 +187,8 @@
 <script>
 "use strict";
 /* ========== 常量与状态 ========== */
-const CFG_KEY = "imgbed_cfg_v1";
+const CFG_KEY = "imgbed_cfg_v2";
+const CFG_KEY_V1 = "imgbed_cfg_v1";
 const HIST_KEY = "imgbed_hist_v1";
 const MAX_BYTES = 100 * 1024 * 1024; // GitHub 硬限制 100MB
 
@@ -207,6 +208,18 @@ function loadCfg(){
   try{
     const raw = localStorage.getItem(CFG_KEY);
     if(raw){ return Object.assign({}, DEFAULT_CFG, JSON.parse(raw)); }
+    // 旧版配置：账号信息继承下来，链接相关的选项统一升级成新默认
+    // （旧默认是 Raw + cdn.jsdelivr.net，这两个在国内基本打不开）
+    const old = localStorage.getItem(CFG_KEY_V1);
+    if(old){
+      const v1 = JSON.parse(old);
+      const migrated = Object.assign({}, DEFAULT_CFG, {
+        token: v1.token || "", owner: v1.owner || "", repo: v1.repo || "",
+        branch: v1.branch || "main", dir: v1.dir || "", keepName: !!v1.keepName
+      });
+      localStorage.setItem(CFG_KEY, JSON.stringify(migrated));
+      return migrated;
+    }
   }catch(e){ /* 忽略损坏数据 */ }
   return Object.assign({}, DEFAULT_CFG);
 }
